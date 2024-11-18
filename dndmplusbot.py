@@ -1,5 +1,6 @@
 import os
 from dotenv import load_dotenv
+from server_lookup import server_lookup
 import discord
 from discord.ext import commands, tasks
 from discord import app_commands
@@ -11,6 +12,7 @@ import datetime
 import logging
 import asyncio
 import re  # Import re to use regex for cleaning up the realm input
+from fuzzywuzzy import process # To match realm names that are incorrectly spelled
 
 # Load environment variables from dndbot.env
 load_dotenv(dotenv_path='dndbot.env')
@@ -44,11 +46,24 @@ client = gspread.authorize(creds)
 spreadsheet = client.open(GOOGLE_SHEET_NAME)
 worksheet = spreadsheet.worksheet(GOOGLE_WORKSHEET)
 
-# Function to sanitize the realm name by removing apostrophes and hyphens
+# Function to look up the correct realm name using server_lookup
 def sanitize_realm(realm_name):
-    # Allow spaces and replace them with hyphens for the URL, and remove apostrophes and hyphens
-    sanitized_realm = re.sub(r"['-]", "", realm_name).replace(" ", "-")
-    return sanitized_realm
+    standardized_realm = ' '.join(word.capitalize() for word in realm_name.split())
+    
+    # Attempt to find the exact match first
+    if standardized_realm in server_lookup:
+        return server_lookup[standardized_realm], standardized_realm
+
+    # If not found, try fuzzy matching
+    try:
+        best_match, score = process.extractOne(standardized_realm, server_lookup.keys())
+        if score > 80:  # Choose a confidence threshold
+            correct_name = best_match
+            sanitized_version = server_lookup[best_match]
+            return sanitized_version, correct_name
+    except Exception as e:
+        logging.error(f"Unexpected error during fuzzy matching: {e}")
+        return None, None  # Return None if no close match is found
 
 # Blizzard API setup
 def get_access_token():
@@ -61,41 +76,51 @@ def get_access_token():
         response.raise_for_status()  # Raise an error if the request fails
         return response.json()['access_token']
     except requests.RequestException as e:
-        logging.error(f"Error obtaining access token for client_id {CLIENT_ID[:4]}**: {e}")
+        logging.error(f"Error obtaining access token for client_id {CLIENT_ID[:4]}** with endpoint {OAUTH_URL}: {e}")
         return None
 
 def get_character_data(realm, character_name, access_token):
-    sanitized_realm = sanitize_realm(realm)  # Sanitize the realm name
+    sanitized_realm, correct_realm_name = sanitize_realm(realm)  # Lookup the sanitized version from the dictionary
+
+    # If the realm cannot be found, return None for all fields
+    if sanitized_realm is None:
+        logging.warning(f"Sanitized realm not found for: {realm}")
+        return None, None, None, None, None # Return None for all fields
 
     # Format URLs using the sanitized realm and character name
     character_url = CHARACTER_URL.format(realm=sanitized_realm, character_name=character_name)
     mythic_profile_url = MYTHIC_PROFILE_URL.format(realm=sanitized_realm, character_name=character_name)
 
-    headers = {
-        'Authorization': f'Bearer {access_token}'
-    }
+    logging.info(f"Fetching character data for {character_name} from URL: {character_url}")
+
+    headers = {'Authorization': f'Bearer {access_token}'}
 
     # Retrieve character data
     response = requests.get(character_url, headers=headers)
     if response.status_code == 200:
         data = response.json()
+        # Logging for character data
+        logging.info(f"Character data retrieved successfully for {character_name} in {sanitized_realm}")
+
         character_class = data.get('character_class', {}).get('name')
         item_level = data.get('equipped_item_level')
 
         # Get Mythic+ rating and highest key
+        logging.info(f"Fetching mythic profile for {character_name} from URL: {mythic_profile_url}")
         mythic_response = requests.get(mythic_profile_url, headers=headers)
         if mythic_response.status_code == 200:
             mythic_data = mythic_response.json()
             mythic_plus_rating = mythic_data.get('mythic_rating', {}).get('rating', 'N/A')
-
             # Extract the highest key level completed from best_runs
             best_runs = mythic_data.get('best_runs', {})
             highest_key = max(run.get('keystone_level', 0) for run in best_runs) if best_runs else 'N/A'
 
-            return character_class, item_level, mythic_plus_rating, highest_key
+            return character_class, item_level, mythic_plus_rating, highest_key, correct_realm_name
+        
+        logging.error(f"Failed to fetch Mythic+ profile for {character_name}. Status {mythic_response.status_code} Content: {mythic_response.content}")
     else:
-        logging.error(f"Error retrieving character data for {character_name}-{sanitized_realm}: {response.content}")
-    return None, None, None, None
+        logging.error(f"Error retrieving character data for {character_name}-{sanitized_realm}: Status {response.status_code} Content: {response.content}")
+    return None, None, None, None, correct_realm_name
 
 def remove_registration(character_name, realm, discord_name):
     # Read all records in the sheet
@@ -140,22 +165,23 @@ class DndOptionsView(discord.ui.View):
                 @discord.ui.button(label="Yes", style=discord.ButtonStyle.danger)
                 async def yes_button(self, interaction: discord.Interaction, button: discord.ui.Button):
                     self.clear_items()
-                    await interaction.response.edit_message(view=self)
-                    
-                    # Remove existing registration
-                    if remove_registration(existing_record['Character'], existing_record['Realm'], interaction.user.name):
-                        # Send a confirmation message that the registration was removed
-                        await interaction.followup.send(
-                            f"Your registration for **{existing_record['Character']}**-**{existing_record['Realm']}** has been successfully removed.",
-                            ephemeral=True
-                        )
-                        # Send a follow-up message to initiate a new registration
-                        await interaction.followup.send("Please click below to start a new registration:", view=DndOptionsView(), ephemeral=True)
-                    else:
-                        await interaction.followup.send(
-                            "An error occurred while trying to remove your registration. Please try again.",
-                            ephemeral=True
-                        )
+                    if not interaction.response.is_done():
+                        await interaction.response.edit_message(view=self)
+                        
+                        # Remove existing registration
+                        if remove_registration(existing_record['Character'], existing_record['Realm'], interaction.user.name):
+                            await interaction.followup.send(
+                                f"Your registration for **{existing_record['Character']}**-**{existing_record['Realm']}** has been successfully removed.",
+                                ephemeral=True
+                            )
+                            # Add a delay before prompting for a new registration
+                            await asyncio.sleep(2)
+                            await interaction.followup.send("Please click below to start a new registration:", view=DndOptionsView(), ephemeral=True)
+                        else:
+                            await interaction.followup.send(
+                                "An error occurred while trying to remove your registration. Please try again.",
+                                ephemeral=True
+                            )
 
                 @discord.ui.button(label="No", style=discord.ButtonStyle.secondary)
                 async def no_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -181,17 +207,18 @@ class DndOptionsView(discord.ui.View):
                 @discord.ui.button(label="Yes", style=discord.ButtonStyle.danger)
                 async def yes_button(self, interaction: discord.Interaction, button: discord.ui.Button):
                     self.clear_items()
-                    await interaction.response.edit_message(view=self)
-                    if remove_registration(existing_record['Character'], existing_record['Realm'], interaction.user.name):
-                        await interaction.followup.send(
-                            f"Your registration for **{existing_record['Character']}**-**{existing_record['Realm']}** has been removed.",
-                            ephemeral=True
-                        )
-                    else:
-                        await interaction.followup.send(
-                            "An error occurred while trying to remove your registration. Please try again.",
-                            ephemeral=True
-                        )
+                    if not interaction.response.is_done():
+                        await interaction.response.edit_message(view=self)
+                        if remove_registration(existing_record['Character'], existing_record['Realm'], interaction.user.name):
+                            await interaction.followup.send(
+                                f"Your registration for **{existing_record['Character']}**-**{existing_record['Realm']}** has been removed.",
+                                ephemeral=True
+                            )
+                        else:
+                            await interaction.followup.send(
+                                "An error occurred while trying to remove your registration. Please try again.",
+                                ephemeral=True
+                            )
 
                 @discord.ui.button(label="No", style=discord.ButtonStyle.secondary)
                 async def no_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -293,50 +320,24 @@ class RegistrationModal(discord.ui.Modal, title="Registration Form"):
         messages_to_delete = []
         
         # Sanitize the realm name for Blizzard API queries by removing apostrophes and hyphens
-        sanitized_realm = sanitize_realm(self.realm.value.lower())
+        sanitized_realm, correct_realm_name = sanitize_realm(self.realm.value.lower())
 
-        # Capitalize the first letter of both the character name and realm for Google Sheets entry
+        # Capitalize the first letter of the character name for Google Sheets entry
         character_name_cap = self.character_name.value.capitalize()
-        realm_cap = ' '.join(word.capitalize() for word in self.realm.value.split())
 
         # Get access token
         access_token = get_access_token()
 
         # Get character data (class, item level, mythic+ rating, highest key)
-        character_class, item_level, mythic_plus_rating, highest_key = get_character_data(sanitized_realm, self.character_name.value.lower(), access_token)
+        character_class, item_level, mythic_plus_rating, highest_key, correct_realm_name = get_character_data(sanitized_realm, self.character_name.value.lower(), access_token)
 
         if character_class is None:
-            error_message = await interaction.response.send_message('Could not retrieve character data. Please check your inputs.', ephemeral=True)
-            if error_message:
-                messages_to_delete.append(error_message)
-            
-            class RetryView(discord.ui.View):
-                @discord.ui.button(label="Try Again", style=discord.ButtonStyle.primary)
-                async def try_again_button(self, retry_interaction: discord.Interaction, button: discord.ui.Button):
-                    await retry_interaction.response.defer(ephemeral=True)
-                    await start_registration(retry_interaction, deferred=False)
-                    # Clear items to show that the action has been taken
-                    self.clear_items()
-                    await retry_interaction.edit_original_response(view=self)
-
-                @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
-                async def cancel_button(self, cancel_interaction: discord.Interaction, button: discord.ui.Button):
-                    cancel_message = await cancel_interaction.response.send_message("Registration process canceled.", ephemeral=True)
-                    if cancel_message:
-                        messages_to_delete.append(cancel_message)
-                    # Clear items to show that the action has been taken
-                    self.clear_items()
-                    await cancel_interaction.edit_original_response(view=self)
-
-            try_cancel_message = await interaction.followup.send("Would you like to try again or cancel?", view=RetryView(), ephemeral=True)
-            if try_cancel_message:
-                messages_to_delete.append(try_cancel_message)
-            return
+            character_class, item_level, mythic_plus_rating, highest_key = "N/A", "N/A", "N/A", "N/A"
 
         # Store basic character info and send a confirmation message
         self.character_info = {
             'character_name': character_name_cap,
-            'realm': realm_cap,
+            'realm': correct_realm_name,
             'character_class': character_class,
             'item_level': item_level,
             'mythic_plus_rating': mythic_plus_rating,
@@ -372,20 +373,21 @@ class RegistrationModal(discord.ui.Modal, title="Registration Form"):
             row_data = [
                 self.character_info['submission_time'],
                 self.character_info['character_name'],
+                self.character_info['character_class'],
+                self.character_info['discord_user'],
                 self.character_info['realm'],
                 role_view.selected_role,
-                key_range_view.selected_key_range,
-                self.special_requests.value,
-                self.character_info['discord_user'],
-                self.character_info['character_class'],
                 self.character_info['item_level'],
                 self.character_info['mythic_plus_rating'],
-                self.character_info['highest_key']
+                self.character_info['highest_key'],
+                key_range_view.selected_key_range,
+                "",  # Empty column
+                self.special_requests.value
             ]
 
             # Append to Google Sheets
             worksheet.append_row(row_data)
-
+            logging.info(f"Successfully appended row to Google Sheets for {self.character_info['character_name']}-{self.character_info['realm']}")
         except Exception as e:
             logging.error(f"Error appending row to Google Sheets for {self.character_info['character_name']}-{self.character_info['realm']}: {e}")
             error_message_sheet = await interaction.followup.send('There was an error recording your registration. Please try again later.', ephemeral=True)
@@ -497,7 +499,7 @@ async def on_ready():
 # Very first text that calls sign up, removal and info buttons
 @bot.tree.command(name="dnd", description="Register for a DnD event")
 async def dnd(interaction: discord.Interaction):
-    await interaction.response.send_message('Please choose an option:', view=DndOptionsView(), ephemeral=True, delete_after=60)
+    await interaction.response.send_message('Please choose an option:', view=DndOptionsView(), ephemeral=True)
 
 # Run the bot
 bot.run(BOT_TOKEN)
