@@ -56,3 +56,4 @@ This bot is designed for DnD Mythic+ event registration on Discord. It interacts
   - Enhanced error handling to ensure the bot checks if a response is already completed before sending follow-up messages.
   - Improved logging with more context on errors during API responses and Google Sheets interactions.
   - Implemented version control, with this release being labeled as version 1.1. Previous features and functionality are considered version 1.0.
+- **1.1.1**: corrected realm_cap to correct_realm_name
