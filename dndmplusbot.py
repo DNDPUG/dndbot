@@ -347,7 +347,7 @@ class RegistrationModal(discord.ui.Modal, title="Registration Form"):
         }
 
         role_message = await interaction.response.send_message(
-            f'Thank you, {interaction.user.name}! Your submission of {character_name_cap}-{realm_cap}, {character_class}. has been recorded. Next, please select your role.',
+            f'Thank you, {interaction.user.name}! Your submission of {character_name_cap}-{correct_realm_name}, {character_class}. has been recorded. Next, please select your role.',
             ephemeral=True, delete_after=30
         )
         if role_message:
