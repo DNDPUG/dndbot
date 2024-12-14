@@ -125,16 +125,32 @@ def get_character_data(realm, character_name, access_token):
 def remove_registration(character_name, realm, discord_name):
     # Read all records in the sheet
     records = worksheet.get_all_records()
+    removed_sheet = spreadsheet.worksheet("Removed Signups")
+    
     for index, record in enumerate(records):
         if (record['Character'] == character_name and
             record['Realm'] == realm and
             record['Discord User'] == discord_name):
             try:
+                # Add to Removed Signups sheet
+                removed_sheet.append_row([
+                    datetime.datetime.now().strftime('%m/%d/%Y %H:%M:%S'),  # Timestamp
+                    record.get('Character', 'N/A'),
+                    record.get('Class', 'N/A'),
+                    record.get('Discord User', 'N/A'),
+                    record.get('Realm', 'N/A'),
+                    record.get('Role', 'N/A')
+                ])
+                logging.info(f"Appended removed record for {character_name}-{realm} to 'Removed Signups'.")
+                
+                # Remove from the main sheet
                 worksheet.delete_rows(index + 2)  # +2 because get_all_records() is 0-indexed, and row 1 is the header
                 return True
             except Exception as e:
                 logging.error(f"Error deleting row for {character_name}-{realm}: {e}")
                 return False
+    # Log if the character wasn't found for removal
+    logging.warning(f"No matching record found for removal: {character_name}-{realm} by {discord_name}.")
     return False
 
 def check_user_registration(discord_name):
@@ -465,13 +481,30 @@ async def start_registration(interaction: discord.Interaction, deferred=False):
 @tasks.loop(time=datetime.time(hour=18, minute=0, tzinfo=datetime.timezone(datetime.timedelta(hours=-5))))
 async def schedule_signup_date_change():
     current_date = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=-5)))  # EST
-    next_saturday = current_date + datetime.timedelta((5 - current_date.weekday()) % 7)
-    worksheet.update_title(f"General Info - {next_saturday.strftime('%m/%d')}")
-    new_worksheet = spreadsheet.add_worksheet(title="General Info", rows="100", cols="20")
-    # Copy the header row from the old worksheet to the new one
-    header_row = worksheet.row_values(1)
-    new_worksheet.append_row(header_row)
-    worksheet = new_worksheet
+    cutoff_date = current_date.strftime('%m-%d-%Y')
+    
+    try:
+        # Rename current sheet to include cutoff date
+        old_title = worksheet.title
+        new_title = f"{old_title} - Cutoff {cutoff_date}"
+        worksheet.update_title(new_title)
+        logging.info(f"Renamed sheet to: {new_title}")
+
+        # Get the header row
+        header_row = worksheet.row_values(1)
+
+        # Create a new worksheet for the next registration period
+        new_worksheet = spreadsheet.add_worksheet(title="General Info", rows="100", cols="20")
+        new_worksheet.append_row(header_row)
+        logging.info("Created new worksheet titled 'General Info' with header row copied.")
+
+        # Update the global worksheet reference
+        global worksheet
+        worksheet = new_worksheet
+
+    except Exception as e:
+        logging.error(f"Error during weekly sheet management: {e}")
+    
 async def update_character_data():
     records = worksheet.get_all_records()
     access_token = get_access_token()
@@ -493,6 +526,10 @@ async def on_ready():
         print(f"Synced {len(synced)} command(s) to Discord!")
     except Exception as e:
         print(f"Failed to sync commands: {e}")
+    
+    # Start weekly management task
+    if not weekly_sheet_management.is_running():
+        weekly_sheet_management.start()
 
     print(f'Logged in as {bot.user.name}')
 
