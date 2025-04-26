@@ -299,22 +299,28 @@ class KeyRangeView(discord.ui.View):
         await interaction.response.send_message('You selected 0-3 (Carved)!', ephemeral=True, delete_after=15)
         self.stop()
 
-    @discord.ui.button(label='4-5 (Runed - Lower)', style=discord.ButtonStyle.primary)
-    async def four_to_five_lower_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.selected_key_range = '4-5 (Runed - Lower)'
-        await interaction.response.send_message('You selected 4-5 (Runed - Lower)!', ephemeral=True, delete_after=15)
+    @discord.ui.button(label='4-6 (Runed)', style=discord.ButtonStyle.primary)
+    async def four_to_six_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.selected_key_range = '4-6 (Runed)'
+        await interaction.response.send_message('You selected 4-6 (Runed)!', ephemeral=True, delete_after=15)
         self.stop()
 
-    @discord.ui.button(label='6-7 (Runed - Upper)', style=discord.ButtonStyle.primary)
-    async def six_to_seven_upper_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.selected_key_range = '6-7 (Runed - Upper)'
-        await interaction.response.send_message('You selected 6-7 (Runed - Upper)!', ephemeral=True, delete_after=15)
+    @discord.ui.button(label='7-9 (Gilded)', style=discord.ButtonStyle.primary)
+    async def seven_to_nine_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.selected_key_range = '7-9 (Gilded)'
+        await interaction.response.send_message('You selected 7-9 (Gilded)!', ephemeral=True, delete_after=15)
         self.stop()
 
-    @discord.ui.button(label='8+ (Gilded)', style=discord.ButtonStyle.primary)
-    async def eight_plus_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.selected_key_range = '8+ (Gilded)'
-        await interaction.response.send_message('You selected 8+ (Gilded)!', ephemeral=True, delete_after=15)
+    @discord.ui.button(label='10-11 (Gilded)', style=discord.ButtonStyle.primary)
+    async def ten_to_eleven_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.selected_key_range = '10-11 (Gilded)'
+        await interaction.response.send_message('You selected 10-11 (Gilded)!', ephemeral=True, delete_after=15)
+        self.stop()
+        
+    @discord.ui.button(label='12+ (Gilded)', style=discord.ButtonStyle.primary)
+    async def twelve_plus_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.selected_key_range = '12+ (Gilded)'
+        await interaction.response.send_message('You selected 12+ (Gilded)!', ephemeral=True, delete_after=15)
         self.stop()
 
 # Initialize and define Modal
@@ -440,7 +446,7 @@ class StartRegistrationView(discord.ui.View):
 
 async def start_registration(interaction: discord.Interaction, deferred=False):
     # Determine the upcoming Saturdays date
-    current_date = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=-5)))  # EST
+    current_date = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=-4)))  # EST
     this_saturday = current_date + datetime.timedelta((5 - current_date.weekday()) % 7)
     next_saturday = this_saturday + datetime.timedelta(weeks=1)
     signup_cutoff = datetime.datetime.combine(current_date.date(), datetime.time(18, 0), tzinfo=datetime.timezone(datetime.timedelta(hours=-5)))
@@ -480,30 +486,35 @@ async def start_registration(interaction: discord.Interaction, deferred=False):
 
 @tasks.loop(time=datetime.time(hour=18, minute=0, tzinfo=datetime.timezone(datetime.timedelta(hours=-5))))
 async def schedule_signup_date_change():
+    global worksheet
     current_date = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=-5)))  # EST
-    cutoff_date = current_date.strftime('%m-%d-%Y')
     
-    try:
-        # Rename current sheet to include cutoff date
-        old_title = worksheet.title
-        new_title = f"{old_title} - Cutoff {cutoff_date}"
-        worksheet.update_title(new_title)
-        logging.info(f"Renamed sheet to: {new_title}")
+    if current_date.weekday() == 4:
+        tomorrow_date = current_date + datetime.timedelta(days=1)  # Add one day to include tomorrow's date
+        cutoff_date = tomorrow_date.strftime('%m-%d-%Y')
+    
+        try:
+            # Rename current sheet to include cutoff date
+            old_title = worksheet.title
+            new_title = f"{old_title} - Cutoff {cutoff_date}"
+            worksheet.update_title(new_title)
+            logging.info(f"Renamed sheet to: {new_title}")
 
-        # Get the header row
-        header_row = worksheet.row_values(1)
+            # Get the header row
+            header_row = worksheet.row_values(1)
 
-        # Create a new worksheet for the next registration period
-        new_worksheet = spreadsheet.add_worksheet(title="General Info", rows="100", cols="20")
-        new_worksheet.append_row(header_row)
-        logging.info("Created new worksheet titled 'General Info' with header row copied.")
+            # Create a new worksheet for the next registration period
+            new_worksheet = spreadsheet.add_worksheet(title="General Info", rows="100", cols="20")
+            new_worksheet.append_row(header_row)
+            logging.info("Created new worksheet titled 'General Info' with header row copied.")
 
-        # Update the global worksheet reference
-        global worksheet
-        worksheet = new_worksheet
+            # Update the global worksheet reference
+            worksheet = new_worksheet
 
-    except Exception as e:
-        logging.error(f"Error during weekly sheet management: {e}")
+        except Exception as e:
+            logging.error(f"Error during weekly sheet management: {e}")
+    else:
+        logging.info("Today is not Friday. No sheet changes are made.")
     
 async def update_character_data():
     records = worksheet.get_all_records()
@@ -528,8 +539,8 @@ async def on_ready():
         print(f"Failed to sync commands: {e}")
     
     # Start weekly management task
-    if not weekly_sheet_management.is_running():
-        weekly_sheet_management.start()
+    if not schedule_signup_date_change.is_running():
+        schedule_signup_date_change.start()
 
     print(f'Logged in as {bot.user.name}')
 

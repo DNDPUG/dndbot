@@ -1,0 +1,31 @@
+Changes for Version 1.2
+	
+1. New Weekly Sheet Creation:
+	Every Friday at 6:00 PM Eastern Time, the bot automatically:
+		Renames the current registration sheet to include the event date (e.g., General Info - MM/DD).
+		Creates a new sheet for future signups with the title General Info.
+		Copies over the header row to the new sheet to maintain consistent formatting.
+2. Removed Signups Sheet:
+	Registrations that are removed by users are now Appended to a dedicated "Removed Signups" sheet for better tracking.
+
+Changes for Version 1.1
+1. Realm Name Matching:
+	Added a lookup system for server/realm names to ensure accurate entries.
+	Users can now enter realm names even if they are slightly misspelled, and the bot will match them to the closest correct name.
+2. Updated Registration Process:
+	Added a 2-second delay between removing a previous registration and prompting for a new one to make the experience smoother.
+	Removed the “Proceed Anyway” button to streamline the user experience if users need to re-register.
+3. Sheet Changes:
+	Rearranged data in Google Sheets to create a more organized format:
+		Specifically, the column for Key Range now has a filter column next to it before the Special Requests field, allowing for further organization of data.
+4. Improved Error Handling and Bot Reliability:
+	Added several error handling improvements to ensure the bot runs more smoothly:
+		Included safeguards to ensure the bot checks if a response is already completed before sending follow-up messages.
+		Enhanced error logging to provide more detail if an issue arises during registration or when communicating with the Blizzard API or Google Sheets.
+5. Logging Updates:
+	Logging has been improved to give more context on any issues related to API responses or interactions with Google Sheets.
+	This will help with diagnosing and fixing any problems that arise during registration or data retrieval.
+6. Version Tracking:
+	Implemented a versioning system for the bot.
+	This release has been labeled as version 1.1. Changes prior to today are considered version 1.0.
+	
