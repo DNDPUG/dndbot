@@ -38,7 +38,7 @@ intents.messages = True
 intents.guilds = True
 intents.message_content = True
 
-bot = commands.Bot(command_prefix='!', intents=intents)
+bot = commands.Bot(command_prefix='!', help_command=None, intents=intents)
 
 # Google Sheets setup
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -46,6 +46,25 @@ creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_APPLICATION_CRED
 client = gspread.authorize(creds)
 spreadsheet = client.open(GOOGLE_SHEET_NAME)
 worksheet = spreadsheet.worksheet(GOOGLE_WORKSHEET)
+
+# Returns the appropriate sheet to check for registration removal.
+# - From Friday 6 PM EST to Saturday 12 PM EST, it uses the renamed "Cutoff" sheet.
+# - Outside that window, it defaults to the main "General Info" sheet.
+# This ensures users can still remove their signup after the cutoff but before the event begins.
+def get_current_removal_sheet():
+    now = datetime.datetime.now(ZoneInfo("America/New_York"))
+
+    # Friday after 6pm to Saturday before noon
+    if (now.weekday() == 4 and now.hour >= 18) or (now.weekday() == 5 and now.hour < 12):
+        cutoff_date = (now + datetime.timedelta(days=1)).strftime('%m-%d-%Y') if now.weekday() == 4 else now.strftime('%m-%d-%Y')
+        try:
+            return spreadsheet.worksheet(f"General Info - Cutoff {cutoff_date}")
+        except Exception as e:
+            logging.warning(f"Expected cutoff sheet not found for removal: {e}")
+            return worksheet  # fallback
+    else:
+        return worksheet
+
 
 # Function to look up the correct realm name using server_lookup
 def sanitize_realm(realm_name):
@@ -125,7 +144,8 @@ def get_character_data(realm, character_name, access_token):
 
 def remove_registration(character_name, realm, discord_name):
     # Read all records in the sheet
-    records = worksheet.get_all_records()
+    active_sheet = get_current_removal_sheet()
+    records = active_sheet.get_all_records()
     removed_sheet = spreadsheet.worksheet("Removed Signups")
     
     for index, record in enumerate(records):
@@ -145,7 +165,7 @@ def remove_registration(character_name, realm, discord_name):
                 logging.info(f"Appended removed record for {character_name}-{realm} to 'Removed Signups'.")
                 
                 # Remove from the main sheet
-                worksheet.delete_rows(index + 2)  # +2 because get_all_records() is 0-indexed, and row 1 is the header
+                active_sheet.delete_rows(index + 2)  # +2 because get_all_records() is 0-indexed, and row 1 is the header
                 return True
             except Exception as e:
                 logging.error(f"Error deleting row for {character_name}-{realm}: {e}")
@@ -418,12 +438,10 @@ class RegistrationModal(discord.ui.Modal, title="Registration Form"):
                 messages_to_delete.append(error_message_sheet)
             return
 
-        final_confirmation = await interaction.followup.send(
+        await interaction.followup.send(
             f'Thank you, {interaction.user.name}! Your registration has been completed with your {role_view.selected_role} {character_class} for keys {key_range_view.selected_key_range}. You are ilvl: {item_level}, and your Mythic+ rating is {mythic_plus_rating}. We will also pull an updated rating closer to the event date.',
             ephemeral=True
         )
-        if final_confirmation:
-            messages_to_delete.append(final_confirmation)
         
         # Delete all ephemeral messages manually after a delay
         await asyncio.sleep(5)  # Optional delay if you want them to read the messages briefly
@@ -566,10 +584,94 @@ async def on_ready():
 
     print(f'Logged in as {bot.user.name}')
 
-# Very first text that calls sign up, removal and info buttons
-@bot.tree.command(name="dnd", description="Register for a DnD event")
+# Group for managing M+ voice channels — used under /mplus
+class ChannelsGroup(app_commands.Group):
+    def __init__(self):
+        super().__init__(name="channels", description="Manage Key Event voice channels")
+
+        self.add_command(app_commands.Command(
+            name="add",
+            description="Add temporary Mythic Plus voice channels (11 and up)",
+            callback=self.add
+        ))
+
+        self.add_command(app_commands.Command(
+            name="remove",
+            description="Remove temporary Mythic Plus voice channels (11 and up)",
+            callback=self.remove
+        ))
+
+    async def add(self, interaction: discord.Interaction, number: int):
+        allowed_roles = ["Mythic+ Leader", "Raid Leader", "Moderator", "Admin"]
+        user_roles = [role.name for role in interaction.user.roles]
+        is_owner = interaction.user.id == interaction.guild.owner_id
+
+        if not (any(role in allowed_roles for role in user_roles) or is_owner):
+            await interaction.response.send_message("You don't have permission to use this command.", ephemeral=True)
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        if number <= 10:
+            await interaction.followup.send("Number must be greater than 10 to avoid modifying static channels.", ephemeral=True)
+            return
+
+        category_name = "Key Event"
+        category = discord.utils.get(interaction.guild.categories, name=category_name)
+        if not category:
+            category = await interaction.guild.create_category(name=category_name)
+
+        created = []
+        for i in range(11, number + 1):
+            name = f"Mythic Plus {i}"
+            if not discord.utils.get(interaction.guild.voice_channels, name=name):
+                await interaction.guild.create_voice_channel(name, category=category)
+                created.append(name)
+
+        await interaction.followup.send(f"Created {len(created)} channel(s): {', '.join(created) if created else 'None'}", ephemeral=True)
+
+    async def remove(self, interaction: discord.Interaction):
+        allowed_roles = ["Mythic+ Leader", "Raid Leader", "Moderator", "Admin"]
+        user_roles = [role.name for role in interaction.user.roles]
+        is_owner = interaction.user.id == interaction.guild.owner_id
+
+        if not (any(role in allowed_roles for role in user_roles) or is_owner):
+            await interaction.response.send_message("You don't have permission to use this command.", ephemeral=True)
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        category = discord.utils.get(interaction.guild.categories, name="Key Event")
+        if not category:
+            await interaction.followup.send("No category named 'Key Event' found.", ephemeral=True)
+            return
+
+        deleted = []
+        for channel in category.voice_channels:
+            if channel.name.startswith("Mythic Plus "):
+                try:
+                    suffix = int(channel.name.split()[-1])
+                    if suffix >= 11:
+                        await channel.delete()
+                        deleted.append(channel.name)
+                except ValueError:
+                    continue
+
+        await interaction.followup.send(f"Removed {len(deleted)} channel(s): {', '.join(deleted) if deleted else 'None'}", ephemeral=True)
+
+# Re-add /dnd as a standalone command that opens the signup panel
+@bot.tree.command(name="dnd", description="Open M+ registration menu")
 async def dnd(interaction: discord.Interaction):
     await interaction.response.send_message('Please choose an option:', view=DndOptionsView(), ephemeral=True)
 
+# Register the /mplus group with channel subcommands
+class MPlusGroup(app_commands.Group):
+    def __init__(self):
+        super().__init__(name="mplus", description="Mythic Plus admin commands")
+        self.add_command(ChannelsGroup())
+
+bot.tree.add_command(MPlusGroup())
+
 # Run the bot
 bot.run(BOT_TOKEN)
+

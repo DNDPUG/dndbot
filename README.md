@@ -63,5 +63,16 @@ This bot is designed for DnD Mythic+ event registration on Discord. It interacts
 		- Creates a new sheet for future signups with the title General Info.
 		- Copies over the header row to the new sheet to maintain consistent formatting.
   -	Registrations that are removed by users are now Appended to a dedicated "Removed Signups" sheet for better tracking.
+- **1.3**:
+- **New `/mplus` Command Group:**
+- Added `/mplus channels add <number>` to create temporary Mythic Plus voice channels numbered 11 and up, under a dedicated category.
+- Added `/mplus channels remove` to delete those temporary channels.
+- Access restricted to specific roles: Mythic+ Leader, Raid Leader, Moderator, Admin, or Server Owner.
+- **Nightly Mythic+ Score Sync:**
+- Automatically updates character item level, Mythic+ rating, and highest key at **12:00 AM EST** every night.
+- Keeps all registration data up-to-date in the Google Sheet.
+- **Post-Cutoff Removal Handling:**
+- After the Friday 6 PM cutoff and until Saturday at 12 PM EST, the bot will look for signups in the renamed "Cutoff" sheet.
+- Ensures users can still remove their signup after the cutoff period if needed.
 
 	
