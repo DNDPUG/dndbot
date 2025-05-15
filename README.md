@@ -65,7 +65,7 @@ This bot is designed for DnD Mythic+ event registration on Discord. It interacts
   -	Registrations that are removed by users are now Appended to a dedicated "Removed Signups" sheet for better tracking.
 - **1.3**:
   - **New `/mplus` Command:**
-	- Added `/mplus channels add <number>` to create temporary Mythic Plus voice channels numbered 11 and up, under a dedicated category.
+	- Added `/mplus channels add <number>` to create temporary Mythic Plus voice channels under a dedicated category.
 	- Added `/mplus channels remove` to delete those temporary channels.
 	- Access restricted to specific roles: Mythic+ Leader, Raid Leader, Moderator, Admin, or Server Owner.
   - **Nightly Mythic+ Score Sync:**
