@@ -13,6 +13,7 @@ import logging
 import asyncio
 import re  # Import re to use regex for cleaning up the realm input
 from fuzzywuzzy import process # To match realm names that are incorrectly spelled
+from zoneinfo import ZoneInfo
 
 # Load environment variables from dndbot.env
 load_dotenv(dotenv_path='dndbot.env')
@@ -446,10 +447,10 @@ class StartRegistrationView(discord.ui.View):
 
 async def start_registration(interaction: discord.Interaction, deferred=False):
     # Determine the upcoming Saturdays date
-    current_date = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=-4)))  # EST
+    current_date = datetime.datetime.now(ZoneInfo("America/New_York"))  # EST
     this_saturday = current_date + datetime.timedelta((5 - current_date.weekday()) % 7)
     next_saturday = this_saturday + datetime.timedelta(weeks=1)
-    signup_cutoff = datetime.datetime.combine(current_date.date(), datetime.time(18, 0), tzinfo=datetime.timezone(datetime.timedelta(hours=-5)))
+    signup_cutoff = datetime.datetime.combine(current_date.date(), datetime.time(18, 0), tzinfo=ZoneInfo("America/New_York"))
     messages_to_delete = []  # Store messages for deletion later
 
     if current_date >= signup_cutoff:
@@ -484,10 +485,10 @@ async def start_registration(interaction: discord.Interaction, deferred=False):
             except discord.NotFound:
                 logging.warning(f"Message {msg.id} was not found for deletion.")
 
-@tasks.loop(time=datetime.time(hour=18, minute=0, tzinfo=datetime.timezone(datetime.timedelta(hours=-5))))
+@tasks.loop(time=datetime.time(hour=18, minute=0, tzinfo=ZoneInfo("America/New_York")))
 async def schedule_signup_date_change():
     global worksheet
-    current_date = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=-5)))  # EST
+    current_date = datetime.datetime.now(ZoneInfo("America/New_York"))  # EST
     
     if current_date.weekday() == 4:
         tomorrow_date = current_date + datetime.timedelta(days=1)  # Add one day to include tomorrow's date
@@ -517,17 +518,35 @@ async def schedule_signup_date_change():
         logging.info("Today is not Friday. No sheet changes are made.")
     
 async def update_character_data():
-    records = worksheet.get_all_records()
+    all_values = worksheet.get_all_values()
+    records = all_values[1:]  # Skip header
     access_token = get_access_token()
-    for record in records:
-        character_name = record['Character']
-        realm = sanitize_realm(record['Realm'].lower())
-        character_class, item_level, mythic_plus_rating, highest_key = get_character_data(realm, character_name.lower(), access_token)
-        if character_class:
-            worksheet.update_cell(record['Row'], 8, character_class)
-            worksheet.update_cell(record['Row'], 9, item_level)
-            worksheet.update_cell(record['Row'], 10, mythic_plus_rating)
-            worksheet.update_cell(record['Row'], 11, highest_key)
+    if not access_token:
+        logging.error("No access token. Skipping update.")
+        return
+
+    for i, row in enumerate(records, start=2):  # start=2 to match actual sheet row numbers
+        try:
+            character_name = row[1]  # Column B
+            realm_cell = row[4]      # Column E
+            if not character_name or not realm_cell:
+                continue
+            realm, _ = sanitize_realm(realm_cell.lower())
+            if not realm:
+                continue
+            _, item_level, mythic_plus_rating, highest_key, _ = get_character_data(realm, character_name.lower(), access_token)
+            if item_level is not None:
+                worksheet.update_cell(i, 7, item_level)            # Column G
+            if mythic_plus_rating is not None:
+                worksheet.update_cell(i, 8, mythic_plus_rating)    # Column H
+            if highest_key is not None:
+                worksheet.update_cell(i, 9, highest_key)           # Column I
+        except Exception as e:
+            logging.error(f"Error updating row {i} for {character_name}: {e}")
+
+@tasks.loop(time=datetime.time(hour=0, minute=0, tzinfo=ZoneInfo("America/New_York")))
+async def nightly_character_update():
+    await update_character_data()
 
 # Console information, shows how many commands the bot has and what the botname is
 @bot.event
@@ -541,6 +560,9 @@ async def on_ready():
     # Start weekly management task
     if not schedule_signup_date_change.is_running():
         schedule_signup_date_change.start()
+    # Start nightly management task
+    if not nightly_character_update.is_running():
+        nightly_character_update.start()
 
     print(f'Logged in as {bot.user.name}')
 
