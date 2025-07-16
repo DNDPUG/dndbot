@@ -1,0 +1,41 @@
+services:
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    ports:
+      - "9000:9000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    restart: unless-stopped
+    networks:
+      - dnd-bot-network
+
+  dnd-bot:
+    build: .
+    container_name: dnd-bot
+    restart: unless-stopped
+    environment:
+      - BLIZZARD_CLIENT_ID=${BLIZZARD_CLIENT_ID}
+      - BLIZZARD_CLIENT_SECRET=${BLIZZARD_CLIENT_SECRET}
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
+      - CHARACTER_URL=${CHARACTER_URL}
+      - MYTHIC_PROFILE_URL=${MYTHIC_PROFILE_URL}
+      - OAUTH_URL=${OAUTH_URL}
+      - PVP_PROFILE_URL=${PVP_PROFILE_URL}
+    volumes:
+      - ./logs:/app/logs
+      - ./google-credentials.json:/app/google-credentials.json:ro
+    networks:
+      - dnd-bot-network
+    depends_on:
+      - portainer
+
+volumes:
+  portainer_data:
+    driver: local
+
+networks:
+  dnd-bot-network:
+    driver: bridge
+    name: dnd-bot-network
