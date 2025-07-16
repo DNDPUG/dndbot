@@ -16,5 +16,6 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "fuzzywuzzy-stubs>=0.0.1",
     "types-requests>=2.32.4.20250611",
 ]
