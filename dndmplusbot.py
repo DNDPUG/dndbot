@@ -18,21 +18,45 @@ from google.oauth2.service_account import Credentials
 from server_lookup import server_lookup
 
 # Load environment variables from dndbot.env
-load_dotenv(dotenv_path="dndbot.env")
+load_dotenv(dotenv_path="dndbot-dev.env")
 
 # Set up logging
 logging.basicConfig(filename="bot_errors.log", level=logging.ERROR)
 
 # Environment variables
-BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
-CLIENT_ID = os.getenv("CLIENT_ID")
-CLIENT_SECRET = os.getenv("CLIENT_SECRET")
-GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
-GOOGLE_SHEET_NAME = os.getenv("GOOGLE_SHEET_NAME", "")
+BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN", "")
+CLIENT_ID = os.getenv("CLIENT_ID", "")
+CLIENT_SECRET = os.getenv("CLIENT_SECRET", "")
+GOOGLE_APPLICATION_CREDENTIALS = os.getenv(
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    "",
+)
+GOOGLE_SHEET_NAME = os.getenv(
+    "GOOGLE_SHEET_NAME",
+    "",
+)
 GOOGLE_WORKSHEET = os.getenv("GOOGLE_WORKSHEET", "")
-OAUTH_URL = os.getenv("OAUTH_URL")
-CHARACTER_URL = os.getenv("CHARACTER_URL")
-MYTHIC_PROFILE_URL = os.getenv("MYTHIC_PROFILE_URL")
+OAUTH_URL = os.getenv("OAUTH_URL", "")
+CHARACTER_URL = os.getenv("CHARACTER_URL", "")
+MYTHIC_PROFILE_URL = os.getenv("MYTHIC_PROFILE_URL", "")
+
+if not all(
+    [
+        BOT_TOKEN,
+        CLIENT_ID,
+        CLIENT_SECRET,
+        GOOGLE_APPLICATION_CREDENTIALS,
+        GOOGLE_SHEET_NAME,
+        GOOGLE_WORKSHEET,
+        OAUTH_URL,
+        CHARACTER_URL,
+        MYTHIC_PROFILE_URL,
+    ]
+):
+    logging.error(
+        "Missing required configuration in dndbot.env. Please ensure all variables are set."
+    )
+
 
 # Set up Discord bot
 intents = discord.Intents.default()
@@ -59,7 +83,7 @@ worksheet = spreadsheet.worksheet(GOOGLE_WORKSHEET)
 # - From Friday 6 PM EST to Saturday 12 PM EST, it uses the renamed "Cutoff" sheet.
 # - Outside that window, it defaults to the main "General Info" sheet.
 # This ensures users can still remove their signup after the cutoff but before the event begins.
-def get_current_removal_sheet():
+def get_current_removal_sheet() -> gspread.worksheet.Worksheet:
     """Return the appropriate worksheet for registration removal.
 
     Uses the cutoff sheet between Friday 6 PM EST and Saturday 12 PM EST.
@@ -86,7 +110,7 @@ def get_current_removal_sheet():
 
 
 # Function to look up the correct realm name using server_lookup
-def sanitize_realm(realm_name):
+def sanitize_realm(realm_name: str) -> tuple[str | None, str | None]:
     """Look up and sanitize the realm name using server_lookup.
 
     Args:
@@ -112,10 +136,11 @@ def sanitize_realm(realm_name):
     except Exception as e:
         logging.error("Unexpected error during fuzzy matching: %s", e)
         return None, None  # Return None if no close match is found
+    return None, None
 
 
 # Blizzard API setup
-def get_access_token():
+def get_access_token() -> str | None:
     """Obtain a Blizzard API access token using client credentials.
 
     Returns:
@@ -141,7 +166,9 @@ def get_access_token():
         return None
 
 
-def get_character_data(realm, character_name, access_token):
+def get_character_data(
+    realm: str, character_name: str, access_token: str
+) -> tuple[str | None, str | None, str | None, str | None, str | None]:
     """Fetch character data from the Blizzard API.
 
     Args:
@@ -236,7 +263,7 @@ def get_character_data(realm, character_name, access_token):
     return None, None, None, None, correct_realm_name
 
 
-def remove_registration(character_name, realm, discord_name):
+def remove_registration(character_name: str, realm: str, discord_name: str) -> bool:
     """Remove a user's registration from the worksheet.
 
     Args:
@@ -299,7 +326,7 @@ def remove_registration(character_name, realm, discord_name):
     return False
 
 
-def check_user_registration(discord_name):
+def check_user_registration(discord_name: str) -> dict[str, int | float | str] | None:
     """Check if a user is registered in the worksheet.
 
     Args:
@@ -371,27 +398,28 @@ class DndOptionsView(discord.ui.View):
                         await interaction.response.edit_message(view=self)
 
                         # Remove existing registration
-                        if remove_registration(
-                            existing_record["Character"],
-                            existing_record["Realm"],
-                            interaction.user.name,
-                        ):
-                            await interaction.followup.send(
-                                f"Your registration for **{existing_record['Character']}**-**{existing_record['Realm']}** has been successfully removed.",
-                                ephemeral=True,
-                            )
-                            # Add a delay before prompting for a new registration
-                            await asyncio.sleep(2)
-                            await interaction.followup.send(
-                                "Please click below to start a new registration:",
-                                view=DndOptionsView(),
-                                ephemeral=True,
-                            )
-                        else:
-                            await interaction.followup.send(
-                                "An error occurred while trying to remove your registration. Please try again.",
-                                ephemeral=True,
-                            )
+                        if existing_record:
+                            if remove_registration(
+                                str(existing_record["Character"]),
+                                str(existing_record["Realm"]),
+                                interaction.user.name,
+                            ):
+                                await interaction.followup.send(
+                                    f"Your registration for **{existing_record['Character']}**-**{existing_record['Realm']}** has been successfully removed.",
+                                    ephemeral=True,
+                                )
+                                # Add a delay before prompting for a new registration
+                                await asyncio.sleep(2)
+                                await interaction.followup.send(
+                                    "Please click below to start a new registration:",
+                                    view=DndOptionsView(),
+                                    ephemeral=True,
+                                )
+                            else:
+                                await interaction.followup.send(
+                                    "An error occurred while trying to remove your registration. Please try again.",
+                                    ephemeral=True,
+                                )
 
                 @discord.ui.button(label="No", style=discord.ButtonStyle.secondary)
                 async def no_button(
@@ -460,20 +488,21 @@ class DndOptionsView(discord.ui.View):
                     self.clear_items()
                     if not interaction.response.is_done():
                         await interaction.response.edit_message(view=self)
-                        if remove_registration(
-                            existing_record["Character"],
-                            existing_record["Realm"],
-                            interaction.user.name,
-                        ):
-                            await interaction.followup.send(
-                                f"Your registration for **{existing_record['Character']}**-**{existing_record['Realm']}** has been removed.",
-                                ephemeral=True,
-                            )
-                        else:
-                            await interaction.followup.send(
-                                "An error occurred while trying to remove your registration. Please try again.",
-                                ephemeral=True,
-                            )
+                        if existing_record:
+                            if remove_registration(
+                                str(existing_record["Character"]),
+                                str(existing_record["Realm"]),
+                                interaction.user.name,
+                            ):
+                                await interaction.followup.send(
+                                    f"Your registration for **{existing_record['Character']}**-**{existing_record['Realm']}** has been removed.",
+                                    ephemeral=True,
+                                )
+                            else:
+                                await interaction.followup.send(
+                                    "An error occurred while trying to remove your registration. Please try again.",
+                                    ephemeral=True,
+                                )
 
                 @discord.ui.button(label="No", style=discord.ButtonStyle.secondary)
                 async def no_button(
@@ -788,7 +817,7 @@ class RegistrationModal(discord.ui.Modal, title="Registration Form"):
             highest_key,
             correct_realm_name,
         ) = get_character_data(
-            sanitized_realm, self.character_name.value.lower(), access_token
+            str(sanitized_realm), self.character_name.value.lower(), str(access_token)
         )
 
         if character_class is None:
@@ -944,7 +973,7 @@ async def start_registration(interaction: discord.Interaction, deferred=False):
     signup_cutoff = datetime.datetime.combine(
         current_date.date(), datetime.time(18, 0), tzinfo=ZoneInfo("America/New_York")
     )
-    messages_to_delete = []  # Store messages for deletion later
+    messages_to_delete: list = []  # Store messages for deletion later
 
     if current_date >= signup_cutoff:
         signup_date_str = next_saturday.strftime("%b %d")
@@ -1131,6 +1160,18 @@ class ChannelsGroup(app_commands.Group):
 
         """
         allowed_roles = ["Mythic+ Leader", "Raid Leader", "Moderator", "Admin"]
+        if not isinstance(interaction.guild, discord.Guild):
+            await interaction.response.send_message(
+                "This command can only be used in a server.", ephemeral=True
+            )
+            return
+
+        if not isinstance(interaction.user, discord.Member):
+            await interaction.response.send_message(
+                "Unable to access your server roles.", ephemeral=True
+            )
+            return
+
         user_roles = [role.name for role in interaction.user.roles]
         is_owner = interaction.user.id == interaction.guild.owner_id
 
@@ -1174,6 +1215,17 @@ class ChannelsGroup(app_commands.Group):
 
         """
         allowed_roles = ["Mythic+ Leader", "Raid Leader", "Moderator", "Admin"]
+        if not isinstance(interaction.guild, discord.Guild):
+            await interaction.response.send_message(
+                "This command can only be used in a server.", ephemeral=True
+            )
+            return
+
+        if not isinstance(interaction.user, discord.Member):
+            await interaction.response.send_message(
+                "Unable to access your server roles.", ephemeral=True
+            )
+            return
         user_roles = [role.name for role in interaction.user.roles]
         is_owner = interaction.user.id == interaction.guild.owner_id
 
