@@ -3,6 +3,7 @@
 import asyncio
 import datetime
 import logging
+import sys
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -20,7 +21,14 @@ from server_lookup import server_lookup
 # Set up logging
 log_level = logging.ERROR if config.LOG_LEVEL == "ERROR" else logging.INFO
 Path("logs").mkdir(exist_ok=True)
-logging.basicConfig(filename="bot.log", level=log_level)
+logging.basicConfig(
+    level=log_level,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler("logs/bot.log"),
+        logging.StreamHandler(sys.stdout),  # Console output
+    ],
+)
 
 # Environment variables
 BOT_TOKEN = config.BOT_TOKEN

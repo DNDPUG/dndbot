@@ -15,18 +15,13 @@ services:
     build: .
     container_name: dnd-bot
     restart: unless-stopped
+    env_file:
+      - dnd-bot-development.env
     environment:
       - APP_ENV=development
-      - BLIZZARD_CLIENT_ID=${BLIZZARD_CLIENT_ID}
-      - BLIZZARD_CLIENT_SECRET=${BLIZZARD_CLIENT_SECRET}
-      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
-      - CHARACTER_URL=${CHARACTER_URL}
-      - MYTHIC_PROFILE_URL=${MYTHIC_PROFILE_URL}
-      - OAUTH_URL=${OAUTH_URL}
-      - PVP_PROFILE_URL=${PVP_PROFILE_URL}
     volumes:
       - ./logs:/app/logs
-      - ./google-credentials.json:/app/google-credentials.json:ro
+      - ./dnd-bot-dev.json:/dnd-bot-dev.json:ro
     networks:
       - dnd-bot-network
     depends_on:
