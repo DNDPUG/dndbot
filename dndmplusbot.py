@@ -18,7 +18,7 @@ from google.oauth2.service_account import Credentials
 from server_lookup import server_lookup
 
 # Load environment variables from dndbot.env
-load_dotenv(dotenv_path="dndbot-dev.env")
+load_dotenv(dotenv_path="dnd-bot-dev.env")
 
 # Set up logging
 logging.basicConfig(filename="bot_errors.log", level=logging.ERROR)
