@@ -1,16 +1,4 @@
 services:
-  portainer:
-    image: portainer/portainer-ce:latest
-    container_name: portainer
-    ports:
-      - "9000:9000"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - portainer_data:/data
-    restart: unless-stopped
-    networks:
-      - dnd-bot-network
-
   dnd-bot:
     build: .
     container_name: dnd-bot
@@ -22,16 +10,3 @@ services:
     volumes:
       - ./logs:/app/logs
       - ./dnd-bot-dev.json:/dnd-bot-dev.json:ro
-    networks:
-      - dnd-bot-network
-    depends_on:
-      - portainer
-
-volumes:
-  portainer_data:
-    driver: local
-
-networks:
-  dnd-bot-network:
-    driver: bridge
-    name: dnd-bot-network
