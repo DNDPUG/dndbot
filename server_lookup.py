@@ -1,3 +1,4 @@
+"""Provides a mapping of World of Warcraft server names to their corresponding slugs."""
 server_lookup = {
     "Aegwynn": "aegwynn",
     "Aerie Peak": "aerie-peak",
