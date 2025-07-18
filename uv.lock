@@ -176,6 +176,7 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "fuzzywuzzy-stubs" },
+    { name = "mypy" },
     { name = "types-requests" },
 ]
 
@@ -193,6 +194,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "fuzzywuzzy-stubs", specifier = ">=0.0.1" },
+    { name = "mypy", specifier = ">=1.17.0" },
     { name = "types-requests", specifier = ">=2.32.4.20250611" },
 ]
 
