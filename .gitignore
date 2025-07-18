@@ -1,6 +1,7 @@
-*.env
+*.env*
 *.json
 *.log
 __pycache__
 .mypy_cache
 .venv
+logs

@@ -3,7 +3,7 @@
 import asyncio
 import datetime
 import logging
-import os
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import discord
@@ -11,34 +11,27 @@ import gspread
 import requests
 from discord import Embed, app_commands
 from discord.ext import commands, tasks
-from dotenv import load_dotenv
-from fuzzywuzzy import process  # To match realm names that are incorrectly spelled
+from fuzzywuzzy import process
 from google.oauth2.service_account import Credentials
 
+from config import Config
 from server_lookup import server_lookup
 
-# Load environment variables from dndbot.env
-load_dotenv(dotenv_path="dnd-bot-dev.env")
-
 # Set up logging
-logging.basicConfig(filename="bot_errors.log", level=logging.ERROR)
+log_level = logging.ERROR if Config.LOG_LEVEL == "ERROR" else logging.INFO
+Path("logs").mkdir(exist_ok=True)
+logging.basicConfig(filename="bot.log", level=log_level)
 
 # Environment variables
-BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN", "")
-CLIENT_ID = os.getenv("CLIENT_ID", "")
-CLIENT_SECRET = os.getenv("CLIENT_SECRET", "")
-GOOGLE_APPLICATION_CREDENTIALS = os.getenv(
-    "GOOGLE_APPLICATION_CREDENTIALS",
-    "",
-)
-GOOGLE_SHEET_NAME = os.getenv(
-    "GOOGLE_SHEET_NAME",
-    "",
-)
-GOOGLE_WORKSHEET = os.getenv("GOOGLE_WORKSHEET", "")
-OAUTH_URL = os.getenv("OAUTH_URL", "")
-CHARACTER_URL = os.getenv("CHARACTER_URL", "")
-MYTHIC_PROFILE_URL = os.getenv("MYTHIC_PROFILE_URL", "")
+BOT_TOKEN = Config.BOT_TOKEN
+CLIENT_ID = Config.CLIENT_ID
+CLIENT_SECRET = Config.CLIENT_SECRET
+GOOGLE_APPLICATION_CREDENTIALS = Config.GOOGLE_APPLICATION_CREDENTIALS
+GOOGLE_SHEET_NAME = Config.GOOGLE_SHEET_NAME
+GOOGLE_WORKSHEET = Config.GOOGLE_WORKSHEET
+OAUTH_URL = Config.OAUTH_URL
+CHARACTER_URL = Config.CHARACTER_URL
+MYTHIC_PROFILE_URL = Config.MYTHIC_PROFILE_URL
 
 if not all(
     [
