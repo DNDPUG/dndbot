@@ -935,7 +935,7 @@ async def start_registration(interaction: discord.Interaction, deferred=False):
     Args:
         interaction (discord.Interaction): The interaction object from Discord.
         deferred (bool): Whether the interaction response has already been deferred.
-        
+
     """
     # Determine the upcoming Saturdays date
     current_date = datetime.datetime.now(ZoneInfo("America/New_York"))  # EST
@@ -974,7 +974,7 @@ async def start_registration(interaction: discord.Interaction, deferred=False):
         if start_reg_message:
             messages_to_delete.append(start_reg_message)
 
-    submission_time = datetime.datetime.now().strftime("%m/%d/%Y %H:%M:%S")
+    # submission_time = datetime.datetime.now().strftime("%m/%d/%Y %H:%M:%S")
 
     await asyncio.sleep(10)
     for msg in messages_to_delete:
@@ -982,7 +982,7 @@ async def start_registration(interaction: discord.Interaction, deferred=False):
             try:
                 await msg.delete()
             except discord.NotFound:
-                logging.warning(f"Message {msg.id} was not found for deletion.")
+                logging.warning("Message %s was not found for deletion.", msg.id)
 
 
 @tasks.loop(time=datetime.time(hour=18, minute=0, tzinfo=ZoneInfo("America/New_York")))
@@ -1006,7 +1006,7 @@ async def schedule_signup_date_change():
             old_title = worksheet.title
             new_title = f"{old_title} - Cutoff {cutoff_date}"
             worksheet.update_title(new_title)
-            logging.info(f"Renamed sheet to: {new_title}")
+            logging.info("Renamed sheet to: %s", new_title)
 
             # Get the header row
             header_row = worksheet.row_values(1)
@@ -1024,7 +1024,7 @@ async def schedule_signup_date_change():
             worksheet = new_worksheet
 
         except Exception as e:
-            logging.error(f"Error during weekly sheet management: {e}")
+            logging.error("Error during weekly sheet management: {}", e)
     else:
         logging.info("Today is not Friday. No sheet changes are made.")
 
@@ -1063,7 +1063,7 @@ async def update_character_data():
             if highest_key is not None:
                 worksheet.update_cell(i, 9, highest_key)  # Column I
         except Exception as e:
-            logging.error(f"Error updating row {i} for {character_name}: {e}")
+            logging.error("Error updating row %s for %s: %s", i, character_name, e)
 
 
 @tasks.loop(time=datetime.time(hour=0, minute=0, tzinfo=ZoneInfo("America/New_York")))
@@ -1128,6 +1128,7 @@ class ChannelsGroup(app_commands.Group):
         Args:
             interaction (discord.Interaction): The interaction object from Discord.
             number (int): The highest channel number to create (must be > 10).
+
         """
         allowed_roles = ["Mythic+ Leader", "Raid Leader", "Moderator", "Admin"]
         user_roles = [role.name for role in interaction.user.roles]
@@ -1170,6 +1171,7 @@ class ChannelsGroup(app_commands.Group):
 
         Args:
             interaction (discord.Interaction): The interaction object from Discord.
+
         """
         allowed_roles = ["Mythic+ Leader", "Raid Leader", "Moderator", "Admin"]
         user_roles = [role.name for role in interaction.user.roles]
@@ -1214,6 +1216,7 @@ async def dnd(interaction: discord.Interaction):
 
     Args:
         interaction (discord.Interaction): The interaction object from Discord.
+
     """
     await interaction.response.send_message(
         "Please choose an option:", view=DndOptionsView(), ephemeral=True
