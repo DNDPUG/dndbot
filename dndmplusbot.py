@@ -846,7 +846,7 @@ class RegistrationModal(discord.ui.Modal, title="Registration Form"):
             delete_after=30,
         )
         if role_message:
-            messages_to_delete.append(role_message)
+            messages_to_delete.append(role_message.resource)
 
         # Prompt for role selection after the modal
         role_view = RoleView()
@@ -919,8 +919,11 @@ class RegistrationModal(discord.ui.Modal, title="Registration Form"):
             if msg:  # Check if the message is not None
                 try:
                     await msg.delete()
+                    logging.info("Message %s was found for deletion.", msg.id)
                 except discord.NotFound:
                     logging.warning("Message %s was not found for deletion.", msg.id)
+                except Exception as e:
+                    logging.error("Error deleting message %s: %s", msg.id, e)
 
 
 # Define StartRegistrationView outside of start_registration
@@ -1012,6 +1015,9 @@ async def start_registration(interaction: discord.Interaction, deferred=False):
                 await msg.delete()
             except discord.NotFound:
                 logging.warning("Message %s was not found for deletion.", msg.id)
+            except Exception as e:
+                logging.error("Error deleting message %s: %s", msg.id, e)
+    # await interaction.delete_original_response()
 
 
 @tasks.loop(time=datetime.time(hour=18, minute=0, tzinfo=ZoneInfo("America/New_York")))
