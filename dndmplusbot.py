@@ -798,7 +798,8 @@ class RegistrationModal(discord.ui.Modal, title="Registration Form"):
             interaction (discord.Interaction): The interaction object from Discord.
 
         """
-        messages_to_delete = []
+        # messages_to_delete: list[WebhookMessage |InteractionMessage | InteractionCallbackActivityInstance | None]= []
+        messages_to_delete: list = []
 
         # Sanitize the realm name for Blizzard API queries by removing apostrophes and hyphens
         sanitized_realm, correct_realm_name = sanitize_realm(self.realm.value.lower())
@@ -845,25 +846,25 @@ class RegistrationModal(discord.ui.Modal, title="Registration Form"):
             ephemeral=True,
             delete_after=30,
         )
-        if role_message:
-            messages_to_delete.append(role_message.resource)
+        messages_to_delete.append(role_message.resource)
 
         # Prompt for role selection after the modal
         role_view = RoleView()
         role_prompt_message = await interaction.followup.send(
-            "Please select your Role:", view=role_view, ephemeral=True
+            "Please select your Role:", view=role_view, ephemeral=True, wait=True
         )
-        if role_prompt_message:
-            messages_to_delete.append(role_prompt_message)
+        messages_to_delete.append(role_prompt_message)
         await role_view.wait()
 
         # Now prompt for key range selection
         key_range_view = KeyRangeView()
         key_range_prompt_message = await interaction.followup.send(
-            "Please select your Key Range:", view=key_range_view, ephemeral=True
+            "Please select your Key Range:",
+            view=key_range_view,
+            ephemeral=True,
+            wait=True,
         )
-        if key_range_prompt_message:
-            messages_to_delete.append(key_range_prompt_message)
+        messages_to_delete.append(key_range_prompt_message)
         await key_range_view.wait()
 
         # Now, update the Google Sheet after gathering all inputs
@@ -901,9 +902,9 @@ class RegistrationModal(discord.ui.Modal, title="Registration Form"):
             error_message_sheet = await interaction.followup.send(
                 "There was an error recording your registration. Please try again later.",
                 ephemeral=True,
+                wait=True,
             )
-            if error_message_sheet:
-                messages_to_delete.append(error_message_sheet)
+            messages_to_delete.append(error_message_sheet)
             return
 
         await interaction.followup.send(
@@ -1002,9 +1003,9 @@ async def start_registration(interaction: discord.Interaction, deferred=False):
             "Click the button below to start the registration process:",
             view=StartRegistrationView(signup_date_str),
             ephemeral=True,
+            wait=True,
         )
-        if start_reg_message:
-            messages_to_delete.append(start_reg_message)
+        messages_to_delete.append(start_reg_message)
 
     # submission_time = datetime.datetime.now().strftime("%m/%d/%Y %H:%M:%S")
 
@@ -1012,6 +1013,7 @@ async def start_registration(interaction: discord.Interaction, deferred=False):
     for msg in messages_to_delete:
         if msg:  # Check if the message is not None
             try:
+                print(f"Deleting message {msg.id} : {msg.content}")
                 await msg.delete()
             except discord.NotFound:
                 logging.warning("Message %s was not found for deletion.", msg.id)
@@ -1123,12 +1125,12 @@ async def on_ready():
     except Exception as e:
         print(f"Failed to sync commands: {e}")
 
-    # # Start weekly management task
-    # if not schedule_signup_date_change.is_running():
-    #     schedule_signup_date_change.start()
-    # # Start nightly management task
-    # if not nightly_character_update.is_running():
-    #     nightly_character_update.start()
+    # Start weekly management task
+    if not schedule_signup_date_change.is_running():
+        schedule_signup_date_change.start()
+    # Start nightly management task
+    if not nightly_character_update.is_running():
+        nightly_character_update.start()
 
     print(f"Logged in as {bot.user.name}")
 
