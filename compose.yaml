@@ -16,6 +16,7 @@ services:
     container_name: dnd-bot
     restart: unless-stopped
     environment:
+      - APP_ENV=development
       - BLIZZARD_CLIENT_ID=${BLIZZARD_CLIENT_ID}
       - BLIZZARD_CLIENT_SECRET=${BLIZZARD_CLIENT_SECRET}
       - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}

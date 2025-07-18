@@ -4,9 +4,6 @@ import os
 
 from dotenv import load_dotenv
 
-# Load environment variables from dndbot.env
-load_dotenv(dotenv_path="dnd-bot-dev.env")
-
 
 class Config:
     """Configuration class to manage environment variables for the bot."""
@@ -14,7 +11,11 @@ class Config:
     def __init__(self):
         """Initialize the configuration by loading environment variables."""
         env = os.getenv("APP_ENV", "development")
-        load_dotenv(f".env.{env}")
+        dotenv_loaded = load_dotenv(f"dnd-bot-{env}.env")
+        if dotenv_loaded:
+            print(f"Environment variables loaded from dnd-bot-{env}.env")
+        else:
+            print(f"Failed to load environment variables from dnd-bot-{env}.env")
         self.BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN", "")
         self.CLIENT_ID = os.getenv("CLIENT_ID", "")
         self.CLIENT_SECRET = os.getenv("CLIENT_SECRET", "")
