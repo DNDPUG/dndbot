@@ -14,24 +14,24 @@ from discord.ext import commands, tasks
 from fuzzywuzzy import process
 from google.oauth2.service_account import Credentials
 
-from config import Config
+from config import config
 from server_lookup import server_lookup
 
 # Set up logging
-log_level = logging.ERROR if Config.LOG_LEVEL == "ERROR" else logging.INFO
+log_level = logging.ERROR if config.LOG_LEVEL == "ERROR" else logging.INFO
 Path("logs").mkdir(exist_ok=True)
 logging.basicConfig(filename="bot.log", level=log_level)
 
 # Environment variables
-BOT_TOKEN = Config.BOT_TOKEN
-CLIENT_ID = Config.CLIENT_ID
-CLIENT_SECRET = Config.CLIENT_SECRET
-GOOGLE_APPLICATION_CREDENTIALS = Config.GOOGLE_APPLICATION_CREDENTIALS
-GOOGLE_SHEET_NAME = Config.GOOGLE_SHEET_NAME
-GOOGLE_WORKSHEET = Config.GOOGLE_WORKSHEET
-OAUTH_URL = Config.OAUTH_URL
-CHARACTER_URL = Config.CHARACTER_URL
-MYTHIC_PROFILE_URL = Config.MYTHIC_PROFILE_URL
+BOT_TOKEN = config.BOT_TOKEN
+CLIENT_ID = config.CLIENT_ID
+CLIENT_SECRET = config.CLIENT_SECRET
+GOOGLE_APPLICATION_CREDENTIALS = config.GOOGLE_APPLICATION_CREDENTIALS
+GOOGLE_SHEET_NAME = config.GOOGLE_SHEET_NAME
+GOOGLE_WORKSHEET = config.GOOGLE_WORKSHEET
+OAUTH_URL = config.OAUTH_URL
+CHARACTER_URL = config.CHARACTER_URL
+MYTHIC_PROFILE_URL = config.MYTHIC_PROFILE_URL
 
 if not all(
     [
